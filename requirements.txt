@@ -1,0 +1,14 @@
+numpy
+scipy
+pandas
+librosa
+scikit-learn
+matplotlib
+seaborn
+torch
+torchaudio
+fastapi
+uvicorn
+soundfile
+python-multipart
+pytest
