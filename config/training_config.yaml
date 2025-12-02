@@ -1,0 +1,45 @@
+augmentation:
+  mixup_alpha: 0.2
+  mixup_prob: 0.3
+  spec_augment:
+    freq_mask_param: 8
+    num_freq_mask: 2
+    num_time_mask: 2
+    time_mask_param: 20
+  use_enhanced_augment: true
+data:
+  num_workers: 2
+  root: data/processed
+  test_split: 0.15
+  val_split: 0.15
+enhancements:
+  balanced_sampling: true
+  gradient_clipping: true
+  mixed_precision: true
+logging:
+  log_level: INFO
+  plot_interval: 5
+  save_plots: true
+  tensorboard: false
+loss:
+  focal_alpha: 1.0
+  focal_gamma: 2.0
+  function: focal
+  label_smoothing: 0.1
+model:
+  cnn_out_dim: 128
+  math_out_dim: 64
+  use_enhanced_model: true
+optimization:
+  optimizer: adamw
+  patience: 5
+  scheduler: cosine
+  step_size: 15
+training:
+  batch_size: 8
+  early_stopping_patience: 10
+  epochs: 50
+  grad_clip: 1.0
+  lr: 0.0002
+  track_f1: true
+  weight_decay: 0.0001

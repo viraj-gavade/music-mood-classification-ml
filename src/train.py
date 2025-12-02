@@ -1,4 +1,5 @@
 import os
+import sys
 import random
 import argparse
 from pathlib import Path
@@ -8,6 +9,9 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from sklearn.metrics import confusion_matrix, classification_report
+
+# Add current directory to path for imports
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.dataset import MoodDataset
 from src.models import HybridModel
@@ -50,7 +54,7 @@ def create_datasets(root, val_split=0.2, augment=True):
 
     return train_ds, val_ds
 
-def train_epoch(model, loader, loss_fn, optimizer, device):
+def train_epoch(model, loader, loss_fn, optimizer, device, grad_clip=1.0):
     model.train()
     running_loss = 0.0
     correct, total = 0, 0
@@ -61,8 +65,15 @@ def train_epoch(model, loader, loss_fn, optimizer, device):
         logits = model(mel, math_vec)
         loss = loss_fn(logits, y)
         loss.backward()
+        
+        # Gradient clipping for stability
+        if grad_clip > 0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip)
+        
         optimizer.step()
-        torch.cuda.empty_cache()
+        
+        if device == "cuda":
+            torch.cuda.empty_cache()
 
         running_loss += loss.item() * y.size(0)
         preds = logits.argmax(dim=1)
@@ -110,22 +121,27 @@ def main(args):
         batch_size=args.batch_size,
         shuffle=True,
         collate_fn=collate_fn,
-        num_workers=0,
-        pin_memory=False
+        num_workers=2,  # Use multiple workers
+        pin_memory=device == "cuda",  # Pin memory if using GPU
+        drop_last=True  # Drop incomplete batches
     )
     val_loader = DataLoader(
         val_ds,
         batch_size=args.batch_size,
         shuffle=False,
         collate_fn=collate_fn,
-        num_workers=0,
-        pin_memory=False
+        num_workers=2,
+        pin_memory=device == "cuda"
     )
 
     model = HybridModel(num_classes=4).to(device)
     loss_fn = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.5, patience=3)
+    
+    # Use AdamW optimizer with better defaults
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, betas=(0.9, 0.999))
+    
+    # Improved scheduler with cosine annealing
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=2, eta_min=1e-6)
 
     best_val_acc = 0.0
     best_state = None
@@ -134,13 +150,14 @@ def main(args):
     for epoch in range(1, args.epochs + 1):
         print(f"\nEpoch {epoch}/{args.epochs}")
 
-        train_loss, train_acc = train_epoch(model, train_loader, loss_fn, optimizer, device)
+        train_loss, train_acc = train_epoch(model, train_loader, loss_fn, optimizer, device, args.grad_clip)
         print(f"Train loss: {train_loss:.4f}  Train acc: {train_acc:.4f}")
 
         val_loss, val_acc, val_preds, val_labels = eval_epoch(model, val_loader, loss_fn, device)
         print(f"Val loss: {val_loss:.4f}  Val acc: {val_acc:.4f}")
 
-        scheduler.step(val_loss)
+        # Update scheduler - cosine annealing doesn't need validation loss
+        scheduler.step()
 
         if val_acc > best_val_acc + 1e-6:
             best_val_acc = val_acc
@@ -183,11 +200,12 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-root", type=str, default="data/processed")
-    parser.add_argument("--epochs", type=int, default=30)
-    parser.add_argument("--batch-size", type=int, default=4)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--weight-decay", type=float, default=1e-5)
+    parser.add_argument("--epochs", type=int, default=40)  # Increased epochs
+    parser.add_argument("--batch-size", type=int, default=8)  # Larger batch size
+    parser.add_argument("--lr", type=float, default=2e-4)  # Lower learning rate
+    parser.add_argument("--weight-decay", type=float, default=1e-4)  # Higher weight decay
     parser.add_argument("--val-split", type=float, default=0.2)
-    parser.add_argument("--early-stopping-patience", type=int, default=6)
+    parser.add_argument("--early-stopping-patience", type=int, default=8)  # More patience
+    parser.add_argument("--grad-clip", type=float, default=1.0, help="Gradient clipping threshold")
     args = parser.parse_args()
     main(args)
