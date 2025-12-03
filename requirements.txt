@@ -12,3 +12,7 @@ uvicorn
 soundfile
 python-multipart
 pytest
+streamlit
+plotly
+requests
+python-dotenv

@@ -58,16 +58,35 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Enhanced header
-st.markdown("""
-<div class="main-header">
-    <h1>🎵 AI Music Mood Analyzer</h1>
-    <p>Advanced deep learning model for real-time music emotion recognition</p>
-    <p><i>Upload your audio file and discover its emotional landscape</i></p>
-</div>
-""", unsafe_allow_html=True)
+# Navigation
+st.sidebar.markdown("## 🎵 Navigation")
+page = st.sidebar.radio(
+    "Select Page:",
+    ["🎼 Audio File Analyzer", "🎧 Spotify Intelligence"],
+    key="page_selection"
+)
 
-# Sidebar configuration
+# Enhanced header  
+if page == "🎼 Audio File Analyzer":
+    st.markdown("""
+    <div class="main-header">
+        <h1>🎵 AI Music Mood Analyzer</h1>
+        <p>Advanced deep learning model for real-time music emotion recognition</p>
+        <p><i>Upload your audio file and discover its emotional landscape</i></p>
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    # Import and render Spotify page
+    try:
+        import spotify_page
+        spotify_page.main()
+        st.stop()  # Stop execution here for Spotify page
+    except ImportError as e:
+        st.error(f"Spotify Intelligence page not available: {e}")
+        st.info("Make sure all Spotify agent dependencies are installed.")
+        st.stop()
+
+# Sidebar configuration (only for Audio File Analyzer)
 with st.sidebar:
     st.header("🎛️ Analysis Settings")
     
