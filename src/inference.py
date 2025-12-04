@@ -134,8 +134,25 @@ class MoodInference:
 
         return mel_tensor.to(DEVICE), math_tensor.to(DEVICE)
 
-    def _standard_prediction(self, slices, offsets):
-        """Standard batch prediction method"""
+    def predict_file(self, audio_path, math_only=False):
+        y, _ = librosa.load(audio_path, sr=self.sr, mono=True)
+        slices, offsets = self._slice_audio(y)
+
+        # ULTRA-FAST MODE: Math features only
+        if math_only and len(slices) > 0:
+            # Use only first slice for instant results
+            y_slice = slices[0]
+            mood, conf = self._get_math_only_prediction(y_slice)
+            
+            return {
+                "final_mood": mood,
+                "final_confidence": np.array(conf),
+                "slice_moods": [mood],
+                "slice_confidences": [conf],
+                "offsets": [0.0],
+                "window_size": self.window
+            }
+
         # Standard batch processing for GPU acceleration
         if len(slices) > 0:
             # Extract all mel spectrograms and math features at once
@@ -188,51 +205,3 @@ class MoodInference:
             "slice_confidences": slice_probs,
             "offsets": offsets
         }
-
-    def predict_mood_ultra_fast(self, y, sr, window_size=10, hop_size=5, use_math_only=True):
-        """Ultra-fast mood prediction from audio array"""
-        # Resample if needed
-        if sr != self.sr:
-            y = librosa.resample(y, orig_sr=sr, target_sr=self.sr)
-        
-        slices, offsets = self._slice_audio(y)
-        
-        # ULTRA-FAST MODE: Math features only
-        if use_math_only and len(slices) > 0:
-            # Use only first slice for instant results
-            y_slice = slices[0]
-            mood, conf = self._get_math_only_prediction(y_slice)
-            
-            return {
-                "final_mood": mood,
-                "final_confidence": np.array(conf),
-                "slice_moods": [mood],
-                "slice_confidences": [conf],
-                "offsets": [0.0],
-                "window_size": window_size
-            }
-        
-        # Fall back to standard processing if needed
-        return self._standard_prediction(slices, offsets)
-    
-    def predict_file(self, audio_path, math_only=False):
-        y, _ = librosa.load(audio_path, sr=self.sr, mono=True)
-        slices, offsets = self._slice_audio(y)
-
-        # ULTRA-FAST MODE: Math features only
-        if math_only and len(slices) > 0:
-            # Use only first slice for instant results
-            y_slice = slices[0]
-            mood, conf = self._get_math_only_prediction(y_slice)
-            
-            return {
-                "final_mood": mood,
-                "final_confidence": np.array(conf),
-                "slice_moods": [mood],
-                "slice_confidences": [conf],
-                "offsets": [0.0],
-                "window_size": self.window
-            }
-
-        # Use standard prediction method
-        return self._standard_prediction(slices, offsets)
