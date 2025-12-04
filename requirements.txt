@@ -16,3 +16,4 @@ streamlit
 plotly
 requests
 python-dotenv
+reportlab

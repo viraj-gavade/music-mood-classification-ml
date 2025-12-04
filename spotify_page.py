@@ -116,7 +116,7 @@ def render_analysis_interface():
         )
     
     with col2:
-        analyze_button = st.button("🔍 Analyze", type="primary", use_container_width=True)
+        analyze_button = st.button("🔍 Analyze", type="primary", width='stretch')
     
     # URL validation feedback
     if spotify_url:
