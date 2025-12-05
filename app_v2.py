@@ -20,9 +20,9 @@ import soundfile as sf
 # PDF generation imports (optional)
 try:
     from reportlab.lib.pagesizes import letter, A4
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, PageBreak
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib import colors
+    from reportlab.lib.colors import Color, black, grey
     from reportlab.lib.units import inch
     from reportlab.graphics.shapes import Drawing
     from reportlab.graphics.charts.barcharts import VerticalBarChart
@@ -220,7 +220,28 @@ def extract_audio_features(_y, sr):
         'RMS Energy': float(np.mean(rms)),
         'Tempo (BPM)': float(tempo) if isinstance(tempo, (int, float, np.number)) else float(tempo[0]),
         'MFCC Mean': float(np.mean(mfccs)),
-        'Chroma Mean': float(np.mean(chroma))
+        'Chroma Mean': float(np.mean(chroma)),
+        # Detailed stats for PDF
+        'spectral_centroid_mean': float(np.mean(spectral_centroids)),
+        'spectral_centroid_std': float(np.std(spectral_centroids)),
+        'spectral_centroid_min': float(np.min(spectral_centroids)),
+        'spectral_centroid_max': float(np.max(spectral_centroids)),
+        'spectral_bandwidth_mean': float(np.mean(spectral_bandwidth)),
+        'spectral_bandwidth_std': float(np.std(spectral_bandwidth)),
+        'spectral_bandwidth_min': float(np.min(spectral_bandwidth)),
+        'spectral_bandwidth_max': float(np.max(spectral_bandwidth)),
+        'spectral_rolloff_mean': float(np.mean(spectral_rolloff)),
+        'spectral_rolloff_std': float(np.std(spectral_rolloff)),
+        'spectral_rolloff_min': float(np.min(spectral_rolloff)),
+        'spectral_rolloff_max': float(np.max(spectral_rolloff)),
+        'tempo': float(tempo) if isinstance(tempo, (int, float, np.number)) else float(tempo[0]),
+        'zero_crossing_rate_mean': float(np.mean(zero_crossing_rate)),
+        'rms_mean': float(np.mean(rms)),
+        'rms_std': float(np.std(rms)),
+        'mfcc_mean': float(np.mean(mfccs)),
+        'mfcc_std': float(np.std(mfccs)),
+        'mfcc_min': float(np.min(mfccs)),
+        'mfcc_max': float(np.max(mfccs))
     }
     
     return features
@@ -262,22 +283,17 @@ def create_radar_chart(conf, labels):
 
 def create_mood_card(mood, confidence, emoji_map, color_map):
     """Create a styled mood result card"""
-    confidence_level = "High" if confidence > 0.7 else "Medium" if confidence > 0.5 else "Low"
-    
     st.markdown(f"""
     <div style="
         background: linear-gradient(135deg, {color_map.get(mood, '#667eea')}, #764ba2);
-        padding: 30px;
+        padding: 40px;
         border-radius: 15px;
         text-align: center;
         box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         margin: 20px 0;
     ">
-        <h1 style="color: white; margin: 0; font-size: 48px;">{emoji_map.get(mood, '🎵')}</h1>
-        <h2 style="color: white; margin: 10px 0;">PREDICTED MOOD: {mood.upper()}</h2>
-        <p style="color: white; font-size: 24px; margin: 10px 0;">
-            Confidence: {confidence*100:.1f}% ({confidence_level})
-        </p>
+        <h1 style="color: white; margin: 0; font-size: 64px;">{emoji_map.get(mood, '🎵')}</h1>
+        <h2 style="color: white; margin: 20px 0; font-size: 36px;">PREDICTED MOOD: {mood.upper()}</h2>
     </div>
     """, unsafe_allow_html=True)
 
@@ -939,14 +955,358 @@ def main():
             
             if PDF_AVAILABLE:
                 if st.button("📄 Generate PDF Report", type="primary", use_container_width=True):
-                    with st.spinner("📊 Generating comprehensive PDF report..."):
-                        # Note: PDF generation code would go here
-                        # Keeping it simple for now
-                        st.info("PDF generation feature - implementation preserved from original")
-                        st.success("✅ PDF generation initiated!")
+                    with st.spinner("📊 Generating comprehensive PDF report with visualizations..."):
+                        try:
+                            # Retrieve cached data from session state to avoid recalculation
+                            audio_features = extract_audio_features(y, sr)
+                            
+                            # Create PDF buffer
+                            pdf_buffer = io.BytesIO()
+                            
+                            # Create document
+                            doc = SimpleDocTemplate(
+                                pdf_buffer,
+                                pagesize=A4,
+                                topMargin=0.75*inch,
+                                bottomMargin=0.75*inch,
+                                leftMargin=0.75*inch,
+                                rightMargin=0.75*inch
+                            )
+                            
+                            # Get styles
+                            styles = getSampleStyleSheet()
+                            title_style = ParagraphStyle(
+                                'CustomTitle',
+                                parent=styles['Title'],
+                                fontSize=24,
+                                spaceAfter=30
+                            )
+                            
+                            heading_style = ParagraphStyle(
+                                'CustomHeading',
+                                parent=styles['Heading1'],
+                                fontSize=16,
+                                spaceAfter=12
+                            )
+                            
+                            story = []
+                            
+                            # Title
+                            story.append(Paragraph("🎵 Music Mood Analysis Report", title_style))
+                            story.append(Spacer(1, 0.3*inch))
+                            
+                            # File Info
+                            story.append(Paragraph("<b>Analysis Summary</b>", styles['Heading1']))
+                            file_info = [
+                                ['Filename:', uploaded_file.name],
+                                ['Duration:', f"{duration:.2f} seconds"],
+                                ['Sample Rate:', f"{sr} Hz"],
+                                ['Analysis Date:', datetime.now().strftime('%Y-%m-%d %H:%M:%S')],
+                                ['Predicted Mood:', final_mood.upper()],
+                                ['Segments Analyzed:', str(len(slice_moods))]
+                            ]
+                            
+                            t = Table(file_info, colWidths=[2*inch, 4*inch])
+                            t.setStyle(TableStyle([
+                                ('BACKGROUND', (0, 0), (0, -1), Color(0.9, 0.9, 0.9)),
+                                ('TEXTCOLOR', (0, 0), (-1, -1), black),
+                                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                                ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+                                ('GRID', (0, 0), (-1, -1), 1, black)
+                            ]))
+                            story.append(t)
+                            story.append(Spacer(1, 0.3*inch))
+                            
+                            # Confidence scores
+                            story.append(Paragraph("<b>Mood Confidence Scores</b>", styles['Heading1']))
+                            conf_data = [['Mood', 'Confidence (%)', 'Level']]
+                            labels = ['Happy', 'Sad', 'Calm', 'Energetic']
+                            for i, label in enumerate(labels):
+                                level = "High" if final_conf[i] > 0.7 else "Medium" if final_conf[i] > 0.5 else "Low"
+                                conf_data.append([label, f"{final_conf[i]*100:.2f}%", level])
+                            
+                            t2 = Table(conf_data, colWidths=[2*inch, 2*inch, 2*inch])
+                            t2.setStyle(TableStyle([
+                                ('BACKGROUND', (0, 0), (-1, 0), Color(0.9, 0.9, 0.9)),
+                                ('TEXTCOLOR', (0, 0), (-1, -1), black),
+                                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                                ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+                                ('GRID', (0, 0), (-1, -1), 1, black)
+                            ]))
+                            story.append(t2)
+                            story.append(Spacer(1, 0.3*inch))
+                            
+                            # Segment analysis
+                            story.append(Paragraph("<b>Segment Analysis</b>", styles['Heading1']))
+                            segment_data = [['Segment', 'Time (s)', 'Mood', 'Confidence']]
+                            for i in range(min(10, len(slice_moods))):  # First 10 segments
+                                segment_data.append([
+                                    str(i+1),
+                                    f"{offsets[i]:.1f} - {offsets[i]+window_size:.1f}",
+                                    slice_moods[i].title(),
+                                    f"{np.max(slice_confs[i])*100:.1f}%"
+                                ])
+                            
+                            t3 = Table(segment_data)
+                            t3.setStyle(TableStyle([
+                                ('BACKGROUND', (0, 0), (-1, 0), Color(0.9, 0.9, 0.9)),
+                                ('TEXTCOLOR', (0, 0), (-1, -1), black),
+                                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                                ('GRID', (0, 0), (-1, -1), 1, black)
+                            ]))
+                            story.append(t3)
+                            
+                            if len(slice_moods) > 10:
+                                story.append(Paragraph(f"<i>... and {len(slice_moods)-10} more segments</i>", styles['Normal']))
+                            
+                            # Add detailed audio features
+                            story.append(PageBreak())
+                            story.append(Paragraph("<b>Audio Feature Analysis</b>", styles['Heading1']))
+                            story.append(Spacer(1, 0.2*inch))
+                            
+                            # Spectral features
+                            story.append(Paragraph("<b>Spectral Features</b>", heading_style))
+                            spectral_data = [
+                                ['Feature', 'Mean', 'Std Dev', 'Min', 'Max'],
+                                ['Spectral Centroid', f"{audio_features['spectral_centroid_mean']:.2f} Hz", 
+                                 f"{audio_features['spectral_centroid_std']:.2f}", 
+                                 f"{audio_features['spectral_centroid_min']:.2f}",
+                                 f"{audio_features['spectral_centroid_max']:.2f}"],
+                                ['Spectral Bandwidth', f"{audio_features['spectral_bandwidth_mean']:.2f} Hz",
+                                 f"{audio_features['spectral_bandwidth_std']:.2f}",
+                                 f"{audio_features['spectral_bandwidth_min']:.2f}",
+                                 f"{audio_features['spectral_bandwidth_max']:.2f}"],
+                                ['Spectral Rolloff', f"{audio_features['spectral_rolloff_mean']:.2f} Hz",
+                                 f"{audio_features['spectral_rolloff_std']:.2f}",
+                                 f"{audio_features['spectral_rolloff_min']:.2f}",
+                                 f"{audio_features['spectral_rolloff_max']:.2f}"]
+                            ]
+                            
+                            t4 = Table(spectral_data, colWidths=[1.5*inch, 1.2*inch, 1.2*inch, 1.2*inch, 1.2*inch])
+                            t4.setStyle(TableStyle([
+                                ('BACKGROUND', (0, 0), (-1, 0), Color(0.9, 0.9, 0.9)),
+                                ('TEXTCOLOR', (0, 0), (-1, -1), black),
+                                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                                ('GRID', (0, 0), (-1, -1), 1, black)
+                            ]))
+                            story.append(t4)
+                            story.append(Spacer(1, 0.2*inch))
+                            
+                            # Temporal features
+                            story.append(Paragraph("<b>Temporal Features</b>", heading_style))
+                            temporal_data = [
+                                ['Feature', 'Value'],
+                                ['Tempo (BPM)', f"{audio_features['tempo']:.2f}"],
+                                ['Zero Crossing Rate', f"{audio_features['zero_crossing_rate_mean']:.4f}"],
+                                ['RMS Energy', f"{audio_features['rms_mean']:.4f}"],
+                                ['RMS Std Dev', f"{audio_features['rms_std']:.4f}"]
+                            ]
+                            
+                            t5 = Table(temporal_data, colWidths=[3*inch, 3*inch])
+                            t5.setStyle(TableStyle([
+                                ('BACKGROUND', (0, 0), (-1, 0), Color(0.9, 0.9, 0.9)),
+                                ('TEXTCOLOR', (0, 0), (-1, -1), black),
+                                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                                ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+                                ('GRID', (0, 0), (-1, -1), 1, black)
+                            ]))
+                            story.append(t5)
+                            story.append(Spacer(1, 0.2*inch))
+                            
+                            # MFCC Statistics
+                            story.append(Paragraph("<b>MFCC Coefficients</b>", heading_style))
+                            mfcc_desc = Paragraph(
+                                f"Mean: {audio_features['mfcc_mean']:.4f} | "
+                                f"Std: {audio_features['mfcc_std']:.4f} | "
+                                f"Min: {audio_features['mfcc_min']:.4f} | "
+                                f"Max: {audio_features['mfcc_max']:.4f}",
+                                styles['Normal']
+                            )
+                            story.append(mfcc_desc)
+                            story.append(Spacer(1, 0.3*inch))
+                            
+                            # Mood distribution statistics
+                            story.append(PageBreak())
+                            story.append(Paragraph("<b>Mood Distribution Analysis</b>", styles['Heading1']))
+                            story.append(Spacer(1, 0.2*inch))
+                            
+                            mood_counts = {}
+                            for mood in slice_moods:
+                                mood_counts[mood] = mood_counts.get(mood, 0) + 1
+                            
+                            total_segments = len(slice_moods)
+                            mood_dist_data = [['Mood', 'Segments', 'Percentage']]
+                            for mood in ['happy', 'sad', 'calm', 'energetic']:
+                                count = mood_counts.get(mood, 0)
+                                percentage = (count / total_segments * 100) if total_segments > 0 else 0
+                                mood_dist_data.append([mood.title(), str(count), f"{percentage:.1f}%"])
+                            
+                            t6 = Table(mood_dist_data, colWidths=[2*inch, 2*inch, 2*inch])
+                            t6.setStyle(TableStyle([
+                                ('BACKGROUND', (0, 0), (-1, 0), Color(0.9, 0.9, 0.9)),
+                                ('TEXTCOLOR', (0, 0), (-1, -1), black),
+                                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                                ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+                                ('GRID', (0, 0), (-1, -1), 1, black)
+                            ]))
+                            story.append(t6)
+                            story.append(Spacer(1, 0.3*inch))
+                            
+                            # Complete segment breakdown
+                            story.append(Paragraph("<b>Complete Segment Breakdown</b>", heading_style))
+                            all_segment_data = [['#', 'Time Range', 'Mood', 'Happy %', 'Sad %', 'Calm %', 'Energetic %']]
+                            for i in range(len(slice_moods)):
+                                all_segment_data.append([
+                                    str(i+1),
+                                    f"{offsets[i]:.1f}-{offsets[i]+window_size:.1f}s",
+                                    slice_moods[i].title(),
+                                    f"{slice_confs[i][0]*100:.1f}",
+                                    f"{slice_confs[i][1]*100:.1f}",
+                                    f"{slice_confs[i][2]*100:.1f}",
+                                    f"{slice_confs[i][3]*100:.1f}"
+                                ])
+                            
+                            t7 = Table(all_segment_data, colWidths=[0.4*inch, 1.2*inch, 1*inch, 0.8*inch, 0.8*inch, 0.8*inch, 1*inch])
+                            t7.setStyle(TableStyle([
+                                ('BACKGROUND', (0, 0), (-1, 0), Color(0.9, 0.9, 0.9)),
+                                ('TEXTCOLOR', (0, 0), (-1, -1), black),
+                                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                                ('FONTSIZE', (0, 0), (-1, -1), 7),
+                                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                                ('GRID', (0, 0), (-1, -1), 0.5, black)
+                            ]))
+                            story.append(t7)
+                            story.append(Spacer(1, 0.3*inch))
+                            
+                            # Add visualizations using cached matplotlib figures
+                            story.append(PageBreak())
+                            story.append(Paragraph("<b>Visualizations</b>", styles['Heading1']))
+                            story.append(Spacer(1, 0.2*inch))
+                            
+                            # Create matplotlib waveform for PDF
+                            story.append(Paragraph("<b>Waveform</b>", heading_style))
+                            fig_wave, ax_wave = plt.subplots(figsize=(8, 2.5))
+                            downsample = max(1, len(y) // 10000)
+                            y_down = y[::downsample]
+                            time_down = np.linspace(0, duration, len(y_down))
+                            ax_wave.plot(time_down, y_down, color='#00d4ff', linewidth=0.5)
+                            ax_wave.fill_between(time_down, y_down, alpha=0.3, color='#00d4ff')
+                            ax_wave.set_xlabel('Time (seconds)')
+                            ax_wave.set_ylabel('Amplitude')
+                            ax_wave.set_title('Audio Waveform')
+                            ax_wave.grid(True, alpha=0.3)
+                            
+                            waveform_buf = io.BytesIO()
+                            fig_wave.savefig(waveform_buf, format='png', dpi=150, bbox_inches='tight', facecolor='white')
+                            plt.close(fig_wave)
+                            waveform_buf.seek(0)
+                            story.append(Image(waveform_buf, width=6*inch, height=2*inch))
+                            story.append(Spacer(1, 0.2*inch))
+                            
+                            # Create matplotlib spectrogram for PDF
+                            story.append(Paragraph("<b>Mel Spectrogram</b>", heading_style))
+                            mel_spec = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=128, fmax=8000)
+                            mel_spec_db = librosa.power_to_db(mel_spec, ref=np.max)
+                            
+                            fig_spec, ax_spec = plt.subplots(figsize=(8, 3))
+                            img = librosa.display.specshow(mel_spec_db, sr=sr, x_axis='time', y_axis='mel', 
+                                                          fmax=8000, ax=ax_spec, cmap='viridis')
+                            ax_spec.set_title('Mel Spectrogram')
+                            fig_spec.colorbar(img, ax=ax_spec, format='%+2.0f dB')
+                            
+                            spec_buf = io.BytesIO()
+                            fig_spec.savefig(spec_buf, format='png', dpi=150, bbox_inches='tight', facecolor='white')
+                            plt.close(fig_spec)
+                            spec_buf.seek(0)
+                            story.append(Image(spec_buf, width=6*inch, height=2.5*inch))
+                            story.append(Spacer(1, 0.2*inch))
+                            
+                            # Save radar chart to buffer (create matplotlib polar chart)
+                            story.append(PageBreak())
+                            story.append(Paragraph("<b>Mood Confidence Radar</b>", heading_style))
+                            
+                            from math import pi
+                            fig_radar, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(projection='polar'))
+                            labels_radar = ['Happy', 'Sad', 'Calm', 'Energetic']
+                            angles = [n / len(labels_radar) * 2 * pi for n in range(len(labels_radar))]
+                            values = list(final_conf) + [final_conf[0]]
+                            angles += angles[:1]
+                            
+                            ax.plot(angles, values, 'o-', linewidth=2, color='#00d4ff')
+                            ax.fill(angles, values, alpha=0.3, color='#00d4ff')
+                            ax.set_xticks(angles[:-1])
+                            ax.set_xticklabels(labels_radar, size=12)
+                            ax.set_ylim(0, 1)
+                            ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
+                            ax.set_yticklabels(['20%', '40%', '60%', '80%', '100%'])
+                            ax.grid(True)
+                            
+                            radar_buf = io.BytesIO()
+                            fig_radar.savefig(radar_buf, format='png', dpi=150, bbox_inches='tight', facecolor='white')
+                            plt.close(fig_radar)
+                            radar_buf.seek(0)
+                            story.append(Image(radar_buf, width=4*inch, height=4*inch))
+                            story.append(Spacer(1, 0.3*inch))
+                            
+                            # Footer
+                            story.append(PageBreak())
+                            story.append(Paragraph("<b>Analysis Notes</b>", styles['Heading1']))
+                            notes_text = f"""
+                            <para>
+                            This comprehensive mood analysis report was generated using a deep learning model trained on 
+                            music audio features. The analysis processes {len(slice_moods)} segments of {window_size} seconds each, 
+                            extracting spectral, temporal, and timbral features from the audio signal.
+                            <br/><br/>
+                            <b>Key Metrics:</b><br/>
+                            • Total Duration: {duration:.2f} seconds<br/>
+                            • Segments Analyzed: {len(slice_moods)}<br/>
+                            • Window Size: {window_size} seconds<br/>
+                            • Sample Rate: {sr} Hz<br/>
+                            <br/>
+                            <b>Feature Extraction:</b><br/>
+                            The model analyzes 13 MFCC coefficients, spectral features (centroid, bandwidth, rolloff), 
+                            temporal features (tempo, zero-crossing rate, RMS energy), and chroma features to determine 
+                            the emotional content of the music.
+                            <br/><br/>
+                            <b>Generated:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+                            </para>
+                            """
+                            story.append(Paragraph(notes_text, styles['Normal']))
+                            
+                            # Build PDF
+                            doc.build(story)
+                            pdf_buffer.seek(0)
+                            
+                            # Download button
+                            st.download_button(
+                                label="💾 Download Comprehensive PDF Report",
+                                data=pdf_buffer,
+                                file_name=f"mood_analysis_{uploaded_file.name.split('.')[0]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                                mime="application/pdf",
+                                use_container_width=True
+                            )
+                            st.success("✅ Comprehensive PDF report with all visualizations generated successfully!")
+                            
+                        except Exception as e:
+                            st.error(f"❌ Error generating PDF: {str(e)}")
             else:
                 st.error("❌ PDF generation libraries not available")
-                st.info("Install reportlab to enable PDF export")
+                st.info("Install reportlab to enable PDF export: pip install reportlab")
 
 if __name__ == "__main__":
     main()
