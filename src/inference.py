@@ -23,8 +23,8 @@ class MoodInference:
         # Maximum speed optimizations
         torch.backends.cudnn.benchmark = True
         torch.backends.cudnn.deterministic = False  # Faster but less reproducible
-        if DEVICE == "cuda":
-            self.model.half()  # FP16
+        # Do not use .half() unless you are sure all inputs and weights are compatible
+        # If you want FP16, ensure all inputs and weights are compatible and your GPU supports it
             
         # Skip torch.compile to avoid Triton dependency issues
         # Still get major speedup from other optimizations
@@ -126,12 +126,9 @@ class MoodInference:
         # Mel normalization
         mel = self._pad_mel(mel)
         mel = (mel - mel.mean()) / (mel.std() + 1e-8)
-        
-        # Use FP16 for GPU speedup
-        dtype = torch.float16 if DEVICE == "cuda" else torch.float32
-        mel_tensor = torch.tensor(mel, dtype=dtype).unsqueeze(0).unsqueeze(0)
-        math_tensor = torch.tensor(math_vec_normalized, dtype=dtype).unsqueeze(0)
-
+        # Always use float32 for input tensors
+        mel_tensor = torch.tensor(mel, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+        math_tensor = torch.tensor(math_vec_normalized, dtype=torch.float32).unsqueeze(0)
         return mel_tensor.to(DEVICE), math_tensor.to(DEVICE)
 
     def predict_file(self, audio_path, math_only=False):
@@ -175,12 +172,10 @@ class MoodInference:
             
             # Single batch inference (much faster than individual predictions)
             with torch.no_grad():
-                if torch.cuda.is_available():
-                    with torch.amp.autocast('cuda'):
-                        batch_logits = self.model(mel_batch_tensor, math_batch_tensor)
-                else:
-                    batch_logits = self.model(mel_batch_tensor, math_batch_tensor)
-                
+                # Ensure tensors are float32 and on correct device
+                mel_batch_tensor = mel_batch_tensor.to(device=DEVICE, dtype=torch.float32)
+                math_batch_tensor = math_batch_tensor.to(device=DEVICE, dtype=torch.float32)
+                batch_logits = self.model(mel_batch_tensor, math_batch_tensor)
                 batch_probs = torch.softmax(batch_logits, dim=1).cpu().numpy()
                 batch_preds = torch.argmax(batch_logits, dim=1).cpu().numpy()
             

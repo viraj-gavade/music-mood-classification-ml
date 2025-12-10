@@ -10,7 +10,8 @@
 
 
 # Data files
-data/
+data/processed/
+data/raw/
 *.npy
 *.npz
 
