@@ -11,9 +11,11 @@ fastapi
 uvicorn
 soundfile
 python-multipart
+torch
+torchaudio
 pytest
 streamlit
 plotly
 requests
 python-dotenv
-reportlab
+streamlit

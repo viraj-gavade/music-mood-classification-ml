@@ -1,3 +1,21 @@
+
+# Model files
+*.pth
+!model.pth
+!best_model.pth
+*.pt
+*.h5
+*.ckpt
+
+
+
+# Data files
+data/
+*.npy
+*.npz
+
+
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -11,6 +29,9 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+# Allow specific model files to be tracked
+!model.pth
+!best_model.pth
 downloads/
 eggs/
 .eggs/
